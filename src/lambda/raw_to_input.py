@@ -1,12 +1,17 @@
 import csv
 import io
 import json
+import logging
 import zipfile
 
 import boto3
 
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
 
 def raw_to_input(event, context):
+    logger.info(event)
     s3_bucket = event["Records"][0]["s3"]["bucket"]["name"]
     s3_key = event["Records"][0]["s3"]["object"]["key"]
 
@@ -18,7 +23,7 @@ def raw_to_input(event, context):
         for filename in z.namelist():
             if filename.endswith(".json"):
                 with z.open(filename) as f:
-                    json_obj = json.loads(f.read())
+                    json_obj = json.loads(f.read())[0]
                     if "invoice" in filename:
                         dict1_invoice = {k: v[0] for k, v in json_obj.items()}
                         dict2_invoice = {k: v[1] for k, v in json_obj.items()}
@@ -32,28 +37,32 @@ def raw_to_input(event, context):
                         dict1_ifa_master = {k: v[0] for k, v in json_obj.items()}
                         dict2_ifa_master = {k: v[1] for k, v in json_obj.items()}
 
-    csv_buffer = csv.writer(io.StringIO())
-    csv_buffer.writerow(dict1_invoice.keys())
-    csv_buffer.writerow(dict1_invoice.values())
+    csv_buffer = io.StringIO()
+    csv_writer = csv.writer(csv_buffer)
+    csv_writer.writerow(dict1_invoice.keys())
+    csv_writer.writerow(dict1_invoice.values())
     s3.put_object(Bucket=s3_bucket, Key="input-data2/invoice/invoice.csv", Body=csv_buffer.getvalue())
     s3.put_object(Bucket=s3_bucket, Key="input-data2/invoice/invoice.json", Body=json.dumps(dict2_invoice))
 
-    csv_buffer = csv.writer(io.StringIO())
-    csv_buffer.writerow(dict1_supplier.keys())
-    csv_buffer.writerow(dict1_supplier.values())
+    csv_buffer = io.StringIO()
+    csv_writer = csv.writer(csv_buffer)
+    csv_writer.writerow(dict1_supplier.keys())
+    csv_writer.writerow(dict1_supplier.values())
     s3.put_object(Bucket=s3_bucket, Key="input-data2/supplier/supplier.csv", Body=csv_buffer.getvalue())
     s3.put_object(Bucket=s3_bucket, Key="input-data2/supplier/supplier.json", Body=json.dumps(dict2_supplier))
 
-    csv_buffer = csv.writer(io.StringIO())
-    csv_buffer.writerow(dict1_organization.keys())
-    csv_buffer.writerow(dict1_organization.values())
+    csv_buffer = io.StringIO()
+    csv_writer = csv.writer(csv_buffer)
+    csv_writer.writerow(dict1_organization.keys())
+    csv_writer.writerow(dict1_organization.values())
     s3.put_object(Bucket=s3_bucket, Key="input-data2/organization/organization.csv", Body=csv_buffer.getvalue())
     s3.put_object(
         Bucket=s3_bucket, Key="input-data2/organization/organization.json", Body=json.dumps(dict2_organization)
     )
 
-    csv_buffer = csv.writer(io.StringIO())
-    csv_buffer.writerow(dict1_ifa_master.keys())
-    csv_buffer.writerow(dict1_ifa_master.values())
+    csv_buffer = io.StringIO()
+    csv_writer = csv.writer(csv_buffer)
+    csv_writer.writerow(dict1_ifa_master.keys())
+    csv_writer.writerow(dict1_ifa_master.values())
     s3.put_object(Bucket=s3_bucket, Key="input-data2/ifa_master/ifa_master.csv", Body=csv_buffer.getvalue())
     s3.put_object(Bucket=s3_bucket, Key="input-data2/ifa_master/ifa_master.json", Body=json.dumps(dict2_ifa_master))
