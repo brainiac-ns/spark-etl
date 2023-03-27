@@ -1,16 +1,14 @@
 import datetime
-import os
 
 from pyspark.sql import SparkSession
 from pyspark.sql.dataframe import DataFrame
-from pyspark.sql.functions import col, count, lit
+from pyspark.sql.functions import col, count, current_date, lit, when
 from pyspark.sql.window import Window
-from sqlalchemy import create_engine
-from sqlalchemy import text as sql_text
 
 from base.sql_connector import SQLConnector
 from constants import Constants
 from models.base.table import Table
+from models.enrichment_data.ifa_invoices import IfaInvoices
 
 
 class CDC:
@@ -35,7 +33,9 @@ class CDC:
         self.spark = spark
         self.sql_connector = SQLConnector(spark)
 
-    def __call__(self):
+    def __call__(
+        self,
+    ):
         old_data_df = self.sql_connector.read_db(self.table_name)
         old_data_df = old_data_df.withColumn(Constants.IS_NEW_RECORD.value, lit(False))
         self.new_data_df = self.new_data_df.withColumn(Constants.IS_NEW_RECORD.value, lit(True))
@@ -49,64 +49,53 @@ class CDC:
             .drop("count_rows", "IS_NEW_RECORD")
         )
 
-        target_table = self.table_name
+        existing_table = old_data_df.filter(col(Table.active_flag.name) == True)
+        existing_table = existing_table.drop(Constants.IS_NEW_RECORD.value)
 
-        update_statement = ""
-        join_filter = ""
-        for key_column in self.pk_columns:
-            join_filter = join_filter + f""" TARGET_TABLE.{key_column} = LAST_UPDATED.{key_column} AND"""
+        left_columns = []
+        for column in existing_table.columns:
+            if column in filtered_df.columns:
+                left_columns.append(f"left.{column}")
+            else:
+                left_columns.append(column)
 
-        # Remove last AND
-        join_filter = join_filter[:-3]
+        joined_df = existing_table.alias("left").join(
+            filtered_df.alias("right"),
+            how="left",
+            on=[
+                col(f"left.{IfaInvoices.logsys.name}") == col(f"right.{IfaInvoices.logsys.name}"),
+                col(f"left.{IfaInvoices.budat.name}") == col(f"right.{IfaInvoices.budat.name}"),
+            ],
+        )
+        joined_df = joined_df.withColumn(
+            Table.published_to.name,
+            when(joined_df[f"right.{IfaInvoices.logsys.name}"].isNotNull(), current_date()).otherwise(
+                joined_df[Table.published_to.name]
+            ),
+        )
+        joined_df = joined_df.withColumn(
+            Table.active_flag.name,
+            when(joined_df[f"right.{IfaInvoices.logsys.name}"].isNotNull(), False).otherwise(
+                joined_df[Table.active_flag.name]
+            ),
+        )
+        joined_df = joined_df.select(left_columns)
 
-        for key in self.update_columns:
-            update_statement = update_statement + f""" {key} =  {self.update_columns[key]},"""
-
-        # Remove last comma
-        update_statement = update_statement[:-1]
-        # Columns to select in source table
-        select_keys = ",".join(search_columns)
-
-        # Update condition used in update clause
-        update_condition = f"""
-                TARGET_TABLE.{self.insert_timestamp_column} < LAST_UPDATED.{self.insert_timestamp_column}
-            """
-        where_clause = f"WHERE {self.active_flag_column} = True"
-
-        # Source Table to get data from
-        last_updated_table = f"""
-                SELECT  {select_keys}, {self.insert_timestamp_column}
-                FROM {target_table}
-                {where_clause}
-            """
-
-        # Merge Into query used for updating CDC flags
-        update_existed_rows_stm = f"""MERGE INTO {target_table} TARGET_TABLE
-                USING( {last_updated_table} ) LAST_UPDATED
-                ON (
-                    {join_filter}
-                    AND TARGET_TABLE.{self.active_flag_column} = True
-                )
-                WHEN MATCHED AND
-                    {update_condition}
-                THEN UPDATE SET {update_statement}
-                """
-
-        # existing_table = old_data_df.filter(col(Table.active_flag.name) == True)
         filtered_df = filtered_df.withColumn(Table.published_to.name, lit(None))
         filtered_df = filtered_df.withColumn(
             Table.published_from.name, lit(datetime.datetime.now().strftime("%Y-%m-%d"))
         )
         filtered_df = filtered_df.withColumn(Table.active_flag.name, lit(True))
-        self.sql_connector.write_to_db(filtered_df, self.table_name)
-        username = os.environ["DB_USER"]
-        password = os.environ["DB_PASSWORD"]
-        endpoint = os.environ["DB_ENDPOINT"]
-        port = "5432"
-        database = "kpi"
-        engine = create_engine(f"postgresql://{username}:{password}@{endpoint}:{port}/{database}")
-        connection = engine.connect()
+        final_df = joined_df.unionByName(filtered_df)
+        self.sql_connector.write_to_db(final_df, self.table_name, "overwrite")
+        # username = os.environ["DB_USER"]
+        # password = os.environ["DB_PASSWORD"]
+        # endpoint = os.environ["DB_ENDPOINT"]
+        # port = "5432"
+        # database = "kpi"
+        # engine = create_engine(f"postgresql://{username}:{password}@{endpoint}:{port}/{database}")
+        # connection = engine.connect()
         # connection.execute(sql_text(update_existed_rows_stm))
-        result = connection.execute(sql_text("SELECT * FROM ENR_IFA"))
-        print(result.fetchone())
-        connection.close()
+        # result = connection.execute(sql_text("SELECT * FROM ENR_IFA"))
+        # print(result.fetchone())
+        # connection.close()

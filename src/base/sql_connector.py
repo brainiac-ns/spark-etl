@@ -21,7 +21,7 @@ class SQLConnector:
 
         return df
 
-    def write_to_db(self, df: DataFrame, table_name: str):
+    def write_to_db(self, df: DataFrame, table_name: str, mode="append"):
         df.write.format("jdbc").option("url", os.environ["DB_URL"]).option("dbtable", table_name).option(
             "user", os.environ["DB_USER"]
-        ).option("password", os.environ["DB_PASSWORD"]).option("driver", "org.postgresql.Driver").mode("append").save()
+        ).option("password", os.environ["DB_PASSWORD"]).option("driver", "org.postgresql.Driver").mode(mode).save()
