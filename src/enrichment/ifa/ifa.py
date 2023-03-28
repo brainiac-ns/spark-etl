@@ -4,7 +4,6 @@ from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.functions import col, desc, lit, row_number, when
 from pyspark.sql.window import Window
 
-from base.spark_utils import SparkUtils
 from base.sql_connector import SQLConnector
 from constants import Constants
 from enrichment.base.cdc import CDC
@@ -60,7 +59,7 @@ class Ifa(Enrichment):
             update_column,
             insert_timestamp_column,
             active_flag_column,
-            self.spark
+            self.spark,
         )
 
         cdc()
@@ -107,9 +106,3 @@ class Ifa(Enrichment):
         df_join_ifa = df_join_ifa.select([IfaInvoices.logsys.name, IfaInvoices.budat.name, target_column])
 
         return df_join_ifa
-
-
-spark = SparkUtils().get_or_create_spark_session()
-
-a = Ifa(spark)
-a()

@@ -1,7 +1,6 @@
 from pyspark.sql.functions import col, current_date, desc, lit, row_number, when
 from pyspark.sql.window import Window
 
-from base.spark_utils import SparkUtils
 from base.sql_connector import SQLConnector
 from constants import Constants
 from enrichment.base.enrichment import Enrichment
@@ -44,12 +43,4 @@ class Buo(Enrichment):
         df_join_org = df_join_org.withColumn(IfaInvoices.published_from.name, lit(current_date()))
         df_join_org = df_join_org.withColumn(IfaInvoices.published_to.name, lit(current_date()))
 
-        df_join_org.show()
-
         self.sql_connector.write_to_db(df_join_org, Constants.ENR_BUO.value)
-
-
-spark = SparkUtils().get_or_create_spark_session()
-
-a = Buo(spark)
-a()

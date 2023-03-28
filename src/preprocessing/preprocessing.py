@@ -107,8 +107,6 @@ class PreprocessingJob:
                     Organization.parent_hierarchy_ids.name,
                     split(df_json[Organization.parent_hierarchy_ids.name], ",").cast("array<string>"),
                 )
-                df_csv.show()
-                df_json.show()
 
             df_union = df_csv.unionByName(df_json)
             logging.info("Union Done")
@@ -123,12 +121,11 @@ class PreprocessingJob:
             elif "supplier" in key:
                 partition_by = Supplier.logsys.name
 
-            if "organization" in key:
-                df_union.show()
             df_union.write.partitionBy(partition_by).mode("overwrite").parquet(
                 "s3a://brainiac-kpi/landing/" + path_parts[1]
             )
 
 
-a = PreprocessingJob()
-a()
+def run_preprocessing():
+    a = PreprocessingJob()
+    a()

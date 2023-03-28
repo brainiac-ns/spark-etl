@@ -2,3 +2,4 @@ boto3==1.26.93
 pyspark==3.3.2
 aws-hadoop==1.0.dev2
 python-dotenv==1.0.0
+apache-airflow==2.5.2

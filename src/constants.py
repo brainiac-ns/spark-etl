@@ -5,6 +5,8 @@ class Constants(Enum):
     IFASAP = "ifasap"
     ENR_IFA = "enr_ifa"
     BUO = "buo"
+    IFA = "ifa"
+    ESN = "esn"
     DUMMY_BUO = "dummy_buo"
     ENR_BUO = "enr_buo"
     ENR_ESN = "enr_esn"

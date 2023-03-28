@@ -1,7 +1,6 @@
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.functions import array_contains, col, current_date, lit, when
 
-from base.spark_utils import SparkUtils
 from base.sql_connector import SQLConnector
 from constants import Constants
 from enrichment.base.enrichment import Enrichment
@@ -28,12 +27,8 @@ class Esn(Enrichment):
         self.df_organization = self.load_organization()
 
     def __call__(self):
-        self.df_invoice.show()
-        self.df_buo.show()
         df_invoice_buo = self.df_invoice.join(self.df_buo, on=[IfaTarget.logsys.name, IfaTarget.budat.name], how="left")
         df_invoice_buo = df_invoice_buo.withColumn(EsnTarget.esn.name, col(BuoTarget.buo.name))
-
-        df_invoice_buo.show()
 
         df_join = df_invoice_buo.join(self.df_ifa, on=[IfaTarget.logsys.name, IfaTarget.budat.name], how="left")
         df_join = df_join.withColumn(
@@ -54,8 +49,6 @@ class Esn(Enrichment):
             ]
         )
 
-        df_join.show()
-
         df_join_org = df_join.join(
             self.df_organization.dropDuplicates([Organization.organization_id.name]),
             how="left",
@@ -74,8 +67,6 @@ class Esn(Enrichment):
         df_join_org = df_join_org.withColumn(IfaInvoices.active_flag.name, lit(True))
         df_join_org = df_join_org.withColumn(IfaInvoices.published_from.name, lit(current_date()))
         df_join_org = df_join_org.withColumn(IfaInvoices.published_to.name, lit(current_date()))
-
-        df_join_org.show()
 
         self.sql_connector.write_to_db(df_join_org, Constants.ENR_ESN.value)
 
@@ -100,9 +91,3 @@ class Esn(Enrichment):
             df = df.filter(col(IfaTarget.budat.name) < timeframe_end)
 
         return df
-
-
-spark = SparkUtils().get_or_create_spark_session()
-
-a = Esn(spark)
-a()
